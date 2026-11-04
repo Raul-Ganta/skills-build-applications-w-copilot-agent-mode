@@ -28,22 +28,26 @@ OctoFit Tracker is a three-tier application for a school fitness program. The st
 
 ## Implementation decisions
 
-Record your plan here before editing code.
-
-- Presentation tier decision:
-- Logic tier decision:
-- Data tier decision:
-- Activity tracking approach:
-- Team management approach:
-- Leaderboard approach:
-- Workout suggestions approach:
+- Presentation tier decision: Keep the React app focused on route-level views, shared API-client fetch behavior, and accessible state handling. Each capability page should render data from the backend with clear loading, empty, and error states, while the root app handles navigation and route composition.
+- Logic tier decision: Keep business rules in dedicated service functions under `octofit-tracker/backend/src/services`, with lightweight Express routes only forwarding request/response data. This keeps validation and aggregation logic testable and avoids embedding business behavior inside controllers.
+- Data tier decision: Use Mongoose schemas for validation and defaults, and keep seed logic idempotent with upserts that preserve existing demo fixtures and reconcile prior team membership when a seeded user moves teams. The data layer owns the source of truth for user/team/activity/workout records.
+- Activity tracking approach: Validate request payloads before creating a record, ensure `userId` and `teamId` refer to existing documents, reject invalid IDs with 4xx responses, and create an `Activity` document with `user`, `team`, `type`, `minutes`, computed `points`, and `occurredAt` fields.
+- Team management approach: Require a team name before creation, store member references as ObjectIds, and expose those members in the list response while leaving validation details in the model rather than route handlers.
+- Leaderboard approach: Aggregate each team's total activity points, sort from highest to lowest, and assign 1-based ranks in the response so the UI can render stable rankings without re-calculating order in the client.
+- Workout suggestions approach: Resolve the user by email, inspect their fitness goal and recent activity patterns, and recommend workouts whose focus matches that trend. Return a list with a clear `reason` and ensure unknown email addresses fail with a deliberate 4xx instead of a generic 500.
 
 ## Test plan
 
 Record the commands you run and what each failure means.
 
 - Data-tier command: `npm run test:data --prefix octofit-tracker/backend`
+  - Use this first to verify the Mongoose schemas and seed behavior. Failures here usually indicate missing validation rules, broken seed updates, or incorrect required fields before API logic is even exercised.
 - API command: `npm run test:api --prefix octofit-tracker/backend`
+  - Use this after the data layer is stable to validate the Express routes and service behavior. Failures here show broken request validation, improper 4xx handling, missing aggregates, or incorrect suggestion matching.
 - Frontend command: `npm test --prefix octofit-tracker/frontend`
+  - Use this to validate that the React UI renders the correct data, loading states, empty states, and accessible error alerts. Failures here typically trace back to missing fetch handling or component-level contract mismatches.
 - Backend build command: `npm run build --prefix octofit-tracker/backend`
+  - Use this as a TypeScript correctness check for the API code and database model layer. Build failures usually point to incorrect imports, missing exports, or type mismatch in service implementations.
 - Frontend build command: `npm run build --prefix octofit-tracker/frontend`
+  - Use this to confirm the React app compiles cleanly with the Vite setup and route/component contracts. Build failures usually indicate missing props, broken imports, or rendering code that does not match the TypeScript contract.
+- Execution order: run the data-tier test first, then the API test, then the frontend test, and finish with the backend/frontend builds. This order keeps the smallest safe implementation loop: model contract -> API contract -> UI contract.
